@@ -48,8 +48,26 @@ export const Header = () => {
     }
   };
 
+  const { selectedCoupon } = useAppStore();
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-end p-4 bg-gray-950/80">
+    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-gray-950/80 backdrop-blur-lg">
+      {/* Selected Coupon Display */}
+      <div className="flex-1">
+        {selectedCoupon && (
+          <div className="flex items-center space-x-2 bg-primary/20 border border-primary/30 rounded-full px-3 py-1 max-w-xs">
+            <span className="text-sm">{selectedCoupon.icon || '🎁'}</span>
+            <span className="text-primary font-semibold text-xs truncate">
+              {selectedCoupon.title}
+            </span>
+            <span className="text-primary text-xs">
+              {selectedCoupon.discountPercent}% OFF
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Wallet Button */}
       <button
         onClick={handleWalletClick}
         className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-primary/20 text-white hover:text-primary rounded-full font-medium transition-colors border border-white/10 hover:border-primary/30"

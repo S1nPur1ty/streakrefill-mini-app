@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { BitrefillProduct, ProductCategory } from '../types/bitrefill';
+import { Coupon, SpinnerPrize, SpinnerResult, CouponCategory } from '../types/coupon';
 
 interface AppState {
   // Navigation
@@ -40,6 +41,24 @@ interface AppState {
   openProductModal: (product: BitrefillProduct) => void;
   closeProductModal: () => void;
   
+  // Coupon System
+  coupons: Coupon[];
+  selectedCoupon: Coupon | null;
+  addCoupon: (coupon: Coupon) => void;
+  selectCoupon: (couponId: string) => void;
+  unselectCoupon: () => void;
+  useCoupon: (couponId: string) => void;
+  getCouponsByCategory: (category: CouponCategory) => Coupon[];
+  
+  // Spinner System
+  spinnerPrizes: SpinnerPrize[];
+  spinnerResults: SpinnerResult[];
+  isSpinning: boolean;
+  spinnerSpeed: 'normal' | 'instant';
+  addSpinnerResult: (result: SpinnerResult) => void;
+  setSpinning: (spinning: boolean) => void;
+  setSpinnerSpeed: (speed: 'normal' | 'instant') => void;
+  
   // Gift Cards (for future use)
   selectedGiftCardCategory: string;
   setGiftCardCategory: (category: string) => void;
@@ -78,7 +97,7 @@ const enableBodyScroll = () => {
 
 export const useAppStore = create<AppState>()(
   devtools(
-    (set) => ({
+    (set, get) => ({
       // Navigation
       activeTab: 'home',
       setActiveTab: (tab) => set({ activeTab: tab }),
@@ -150,17 +169,72 @@ export const useAppStore = create<AppState>()(
         set({ selectedProduct: null });
       },
       
+      // Coupon System
+      coupons: [],
+      selectedCoupon: null,
+      addCoupon: (coupon) => 
+        set((state) => ({ 
+          coupons: [...state.coupons, coupon] 
+        })),
+      selectCoupon: (couponId) => 
+        set((state) => {
+          const coupons = state.coupons.map(c => ({
+            ...c,
+            isSelected: c.id === couponId
+          }));
+          const selectedCoupon = coupons.find(c => c.id === couponId) || null;
+          return { coupons, selectedCoupon };
+        }),
+      unselectCoupon: () => 
+        set((state) => ({
+          coupons: state.coupons.map(c => ({ ...c, isSelected: false })),
+          selectedCoupon: null
+        })),
+      useCoupon: (couponId) => 
+        set((state) => ({
+          coupons: state.coupons.map(c => 
+            c.id === couponId ? { ...c, isUsed: true, isSelected: false } : c
+          ),
+          selectedCoupon: null
+        })),
+      getCouponsByCategory: (category: CouponCategory) => {
+        const state = get();
+        return state.coupons.filter(c => c.category === category && !c.isUsed);
+      },
+      
+      // Spinner System
+      spinnerPrizes: [
+        { text: "5% OFF", isInstantWin: true, probability: 20, color: "#f97066", coupon: undefined },
+        { text: "10% OFF", isInstantWin: true, probability: 15, color: "#2e90fa", coupon: undefined },
+        { text: "15% OFF", isInstantWin: true, probability: 10, color: "#fdb022", coupon: undefined },
+        { text: "20% OFF", isInstantWin: true, probability: 5, color: "#ee46bc", coupon: undefined },
+        { text: "Try Again", isInstantWin: false, probability: 30, color: "#8f7f8f", coupon: undefined },
+        { text: "Free Shipping", isInstantWin: true, probability: 15, color: "#00ff00", coupon: undefined },
+        { text: "Lucky Day!", isInstantWin: true, probability: 5, color: "#854CFF", coupon: undefined }
+      ],
+      spinnerResults: [],
+      isSpinning: false,
+      spinnerSpeed: 'normal',
+      addSpinnerResult: (result: SpinnerResult) => 
+        set((state) => ({ 
+          spinnerResults: [...state.spinnerResults, result] 
+        })),
+      setSpinning: (spinning: boolean) => 
+        set({ isSpinning: spinning }),
+      setSpinnerSpeed: (speed: 'normal' | 'instant') => 
+        set({ spinnerSpeed: speed }),
+      
       // Gift Cards
       selectedGiftCardCategory: 'all',
-      setGiftCardCategory: (category) => 
+      setGiftCardCategory: (category: string) => 
         set({ selectedGiftCardCategory: category }),
       
       // Scoreboard
       userXP: 0,
       userScore: 0,
-      addXP: (amount) => 
+      addXP: (amount: number) => 
         set((state) => ({ userXP: state.userXP + amount })),
-      addScore: (amount) => 
+      addScore: (amount: number) => 
         set((state) => ({ userScore: state.userScore + amount })),
     }),
     {
