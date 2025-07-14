@@ -1,1 +1,2 @@
-export { useMiniApp } from './useMiniApp'; 
+export { useMiniApp } from './useMiniApp';
+export { useBitrefillProducts } from './useBitrefillProducts'; 

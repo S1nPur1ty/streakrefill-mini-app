@@ -4,7 +4,7 @@ import { useMiniApp } from './hooks/useMiniApp';
 import { useAppStore } from './stores';
 
 const App = () => {
-  const { isMiniApp, isLoading } = useMiniApp();
+  const { isLoading } = useMiniApp();
   const { activeTab } = useAppStore();
 
   const renderPage = () => {
@@ -36,7 +36,7 @@ const App = () => {
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
       <Header />
       
-      <main className="flex-1 overflow-auto pb-20">
+      <main className="flex-1 pb-20 pt-20">
         {renderPage()}
       </main>
       

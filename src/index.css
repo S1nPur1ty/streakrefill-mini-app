@@ -1,14 +1,28 @@
 @import "tailwindcss";
 
+/* Tailwind v4 CSS-based configuration */
+@theme {
+  --color-primary: #00ff00;
+  --color-secondary: #00cc00; 
+  --color-tertiary: #00aa00;
+  --color-success: #00ff00;
+  --color-warning: #ffaa00;
+  --color-error: #ff3333;
+}
+
 /* Safe area support for mobile devices */
 .safe-area-pb {
   padding-bottom: max(env(safe-area-inset-bottom), 1rem);
 }
 
-/* Ensure proper mobile viewport handling */
+/* Ensure proper mobile viewport handling and hide horizontal scrollbars */
+html, body {
+  overflow-x: clip; /* Use clip instead of hidden to avoid creating scroll context */
+}
+
 @media (max-width: 768px) {
   body {
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 }
 
@@ -51,20 +65,62 @@ button:active {
   transform: scale(0.95);
 }
 
-/* Custom scrollbar for webkit browsers */
-::-webkit-scrollbar {
-  width: 6px;
+/* Matrix-style green scrollbar for vertical scrolling only */
+::-webkit-scrollbar:vertical {
+  width: 8px;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+::-webkit-scrollbar:horizontal {
+  height: 0px; /* Hide horizontal scrollbars */
 }
 
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
+::-webkit-scrollbar-track:vertical {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+::-webkit-scrollbar-thumb:vertical {
+  background: linear-gradient(180deg, #00ff00, #00cc00);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover:vertical {
+  background: linear-gradient(180deg, #00ff00, #00aa00);
+}
+
+/* Matrix glow animation removed */
+
+/* Scrollbar hide utility moved to tailwind.config.js */
+
+/* Firefox Matrix scrollbar styling - vertical only */
+html, body {
+  scrollbar-width: thin;
+  scrollbar-color: #00ff00 rgba(0, 0, 0, 0.3);
+}
+
+/* Hide scrollbars by default, show only when needed */
+* {
+  scrollbar-width: auto;
+  scrollbar-color: #00ff00 rgba(0, 0, 0, 0.3);
+}
+
+/* Hide horizontal scrollbars globally */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Force hide horizontal scrollbars on overflow elements */
+.overflow-x-auto::-webkit-scrollbar {
+  display: none;
+}
+
+/* Ensure no horizontal scrollbars show up anywhere */
+::-webkit-scrollbar:horizontal {
+  height: 0px !important;
+  display: none !important;
 }

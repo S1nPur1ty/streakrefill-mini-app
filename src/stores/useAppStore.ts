@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+import { BitrefillProduct, ProductCategory } from '../types/bitrefill';
 
 interface AppState {
   // Navigation
@@ -25,6 +26,20 @@ interface AppState {
   theme: 'dark' | 'light';
   toggleTheme: () => void;
   
+  // Products
+  products: Record<ProductCategory, BitrefillProduct[]>;
+  productsLoading: boolean;
+  productsError: string | null;
+  setProducts: (category: ProductCategory, products: BitrefillProduct[]) => void;
+  setAllProducts: (products: Record<ProductCategory, BitrefillProduct[]>) => void;
+  setProductsLoading: (loading: boolean) => void;
+  setProductsError: (error: string | null) => void;
+  
+  // Modal State
+  selectedProduct: BitrefillProduct | null;
+  openProductModal: (product: BitrefillProduct) => void;
+  closeProductModal: () => void;
+  
   // Gift Cards (for future use)
   selectedGiftCardCategory: string;
   setGiftCardCategory: (category: string) => void;
@@ -36,9 +51,34 @@ interface AppState {
   addScore: (amount: number) => void;
 }
 
+// Body scroll control functions
+const disableBodyScroll = () => {
+  const body = document.body;
+  const scrollY = window.scrollY;
+  
+  body.style.position = 'fixed';
+  body.style.top = `-${scrollY}px`;
+  body.style.width = '100%';
+  body.style.overflow = 'hidden';
+};
+
+const enableBodyScroll = () => {
+  const body = document.body;
+  const scrollY = body.style.top;
+  
+  body.style.position = '';
+  body.style.top = '';
+  body.style.width = '';
+  body.style.overflow = '';
+  
+  if (scrollY) {
+    window.scrollTo(0, parseInt(scrollY || '0') * -1);
+  }
+};
+
 export const useAppStore = create<AppState>()(
   devtools(
-    (set, get) => ({
+    (set) => ({
       // Navigation
       activeTab: 'home',
       setActiveTab: (tab) => set({ activeTab: tab }),
@@ -75,6 +115,40 @@ export const useAppStore = create<AppState>()(
         set((state) => ({ 
           theme: state.theme === 'dark' ? 'light' : 'dark' 
         })),
+      
+      // Products
+      products: {
+        xbox: [],
+        playstation: [],
+        nintendo: [],
+        steam: []
+      },
+      productsLoading: false,
+      productsError: null,
+      setProducts: (category, products) =>
+        set((state) => ({
+          products: {
+            ...state.products,
+            [category]: products
+          }
+        })),
+      setAllProducts: (products) =>
+        set({ products }),
+      setProductsLoading: (loading) =>
+        set({ productsLoading: loading }),
+      setProductsError: (error) =>
+        set({ productsError: error }),
+      
+      // Modal State
+      selectedProduct: null,
+      openProductModal: (product) => {
+        disableBodyScroll();
+        set({ selectedProduct: product });
+      },
+      closeProductModal: () => {
+        enableBodyScroll();
+        set({ selectedProduct: null });
+      },
       
       // Gift Cards
       selectedGiftCardCategory: 'all',
