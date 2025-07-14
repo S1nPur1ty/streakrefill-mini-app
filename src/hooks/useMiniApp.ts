@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
+import { useAppStore } from "../stores";
 
 export const useMiniApp = () => {
-  const [isMiniApp, setIsMiniApp] = useState<boolean | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { isMiniApp, isLoading, setMiniAppStatus } = useAppStore();
 
   useEffect(() => {
     const checkMiniApp = async () => {
       try {
         const miniAppStatus = await sdk.isInMiniApp();
-        setIsMiniApp(miniAppStatus);
+        setMiniAppStatus(miniAppStatus, false);
         
         if (miniAppStatus) {
           // Mini App-specific initialization
@@ -17,14 +17,12 @@ export const useMiniApp = () => {
         }
       } catch (error) {
         console.error('Error checking Mini App status:', error);
-        setIsMiniApp(false);
-      } finally {
-        setIsLoading(false);
+        setMiniAppStatus(false, false);
       }
     };
 
     checkMiniApp();
-  }, []);
+  }, [setMiniAppStatus]);
 
   return { isMiniApp, isLoading };
 }; 
