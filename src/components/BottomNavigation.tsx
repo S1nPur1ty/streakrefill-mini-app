@@ -13,49 +13,48 @@ export const BottomNavigation = () => {
   ];
 
   return (
-    <div className="fixed left-0 right-0 bottom-4 flex justify-center z-50 pointer-events-none select-none">
-      <div className="flex w-full max-w-md mx-auto px-2">
-        <nav className="flex flex-1 items-end justify-between bg-white/10 backdrop-blur-xl shadow-2xl rounded-full py-1 px-1 gap-1 pointer-events-auto">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            const isCenter = tab.id === 'spinner';
-
-            // Center tab (Spinner): visually distinct
-            if (isCenter) {
+    <div className="fixed bottom-0 left-0 right-0 p-6 pb-safe">
+      {/* Floating pill container */}
+      <div className="relative max-w-sm mx-auto">
+        <div className="bg-white/10 backdrop-blur-xl rounded-full px-1 py-1 shadow-2xl border border-white/10">
+          <div className="flex items-center justify-between">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex flex-col items-center justify-center -mt-6 bg-white text-black shadow-xl rounded-full w-16 h-16 border-4 border-white transition-all duration-300 z-10 ${
-                    isActive ? 'scale-110' : 'scale-100 opacity-90'
+                  className={`relative transition-all duration-1000 ease-out p-3 rounded-full ${
+                    isActive
+                      ? 'bg-white/10 backdrop-blur-sm'
+                      : 'hover:bg-white/10'
                   }`}
-                  style={{ boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.25)' }}
                 >
-                  <Icon size={32} weight={isActive ? 'fill' : 'regular'} />
-                  {spinnerTickets > 0 && (
-                    <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shadow border border-white/20">
-                      {spinnerTickets > 9 ? '9+' : spinnerTickets}
+                  <div className="flex items-center gap-2 whitespace-nowrap">
+                    <div className="relative flex-shrink-0">
+                      <Icon 
+                        size={24} 
+                        weight={isActive ? 'fill' : 'regular'} 
+                        className={`transition-all duration-1000 ease-out ${
+                            isActive 
+                            ? 'text-white' 
+                            : 'text-white/70'
+                        }`}
+                      />
                     </div>
-                  )}
+                    {tab.id === 'spinner' && spinnerTickets > 0 && (
+                        <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shadow-lg">
+                          {spinnerTickets > 9 ? '9+' : spinnerTickets}
+                        </div>
+                    )}
+                  </div>
                 </button>
               );
-            }
-
-            // Other tabs
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 flex flex-col items-center justify-center h-12 transition-all duration-300 rounded-full relative ${
-                  isActive ? 'text-white scale-110' : 'text-white/70 cursor-pointer hover:scale-110'
-                }`}
-              >
-                <Icon size={24} weight={isActive ? 'fill' : 'regular'} />
-              </button>
-            );
-          })}
-        </nav>
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );

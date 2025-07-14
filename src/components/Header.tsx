@@ -52,7 +52,7 @@ export const Header = () => {
     <header className="flex items-center justify-end p-4">
       <button
         onClick={handleWalletClick}
-        className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-medium transition-colors"
+        className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full font-medium transition-colors"
       >
         {isConnected ? (
           <>
