@@ -12,14 +12,15 @@
   "dependencies": {
     "@farcaster/miniapp-sdk": "latest",
     "@farcaster/miniapp-wagmi-connector": "latest",
+    "@supabase/supabase-js": "^2.51.0",
     "@tailwindcss/vite": "^4.1.11",
     "@tanstack/react-query": "5.45.1",
     "ethereum-blockies": "^0.1.1",
     "phosphor-react": "^1.4.1",
     "react": "^18.3.1",
+    "react-custom-roulette": "^1.4.1",
     "react-dom": "^18.3.1",
     "react-icons": "^5.5.0",
-    "spin-wheel-game": "^1.0.3-alpha.3",
     "tailwindcss": "^4.1.11",
     "viem": "latest",
     "wagmi": "latest",
@@ -27,11 +28,14 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.8.0",
+    "@types/ethereum-blockies": "^0.1.2",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.2.1",
     "@wagmi/cli": "latest",
     "typescript": "^5.8.3",
-    "vite": "^5.2.11"
+    "vite": "^5.2.11",
+    "vite-compatible-readable-stream": "^3.6.1",
+    "vite-plugin-node-polyfills": "^0.24.0"
   }
 }

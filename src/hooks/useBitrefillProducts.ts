@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { bitrefillService } from '../services/bitrefill';
-import { useAppStore } from '../stores';
+import { useAppStore } from '../stores/useAppStore';
 
 export const useBitrefillProducts = () => {
   const {

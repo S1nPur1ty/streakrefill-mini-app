@@ -1,25 +1,27 @@
-import { ShoppingCart, CircleNotch, Trophy, User, Gift } from "phosphor-react";
-import { useAppStore } from "../stores";
+import { Icon } from "./ui";
+import { useAppStore } from "../stores/useAppStore";
+import * as PhosphorIcons from 'phosphor-react';
+
+type TabIconName = keyof typeof PhosphorIcons;
 
 export const BottomNavigation = () => {
   const { activeTab, setActiveTab, spinnerTickets } = useAppStore();
 
   const tabs = [
-    { id: 'home', label: 'Home', icon: ShoppingCart },
-    { id: 'rewards', label: 'Rewards', icon: Gift },
-    { id: 'spinner', label: 'Spinner', icon: CircleNotch },
-    { id: 'scoreboard', label: 'Scores', icon: Trophy },
-    { id: 'profile', label: 'Profile', icon: User }
+    { id: 'home', label: 'Home', icon: 'ShoppingCart' as TabIconName },
+    { id: 'rewards', label: 'Rewards', icon: 'Gift' as TabIconName },
+    { id: 'spinner', label: 'Spinner', icon: 'CircleNotch' as TabIconName },
+    { id: 'milestones', label: 'Milestones', icon: 'Star' as TabIconName },
+    { id: 'profile', label: 'Profile', icon: 'User' as TabIconName }
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 p-6 pb-safe">
+    <div className="fixed bottom-0 left-0 right-0 p-6 pb-safe z-navigation">
       {/* Floating pill container */}
       <div className="relative max-w-sm mx-auto">
         <div className="bg-gray-950/80 rounded-full px-1 py-1 shadow-2xl border border-gray-950">
           <div className="flex items-center justify-between">
             {tabs.map((tab) => {
-              const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               
               return (
@@ -35,7 +37,8 @@ export const BottomNavigation = () => {
                   <div className="flex items-center gap-2 whitespace-nowrap">
                     <div className="relative flex-shrink-0">
                       <Icon 
-                        size={24} 
+                        name={tab.icon}
+                        size={24}
                         weight={isActive ? 'fill' : 'regular'} 
                         className={`transition-all duration-1000 ease-out ${
                             isActive 

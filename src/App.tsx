@@ -1,7 +1,8 @@
-import { Header, BottomNavigation } from './components';
-import { Home, Spinner, Scoreboard, Profile, Rewards } from './pages';
+import { Header } from './components/Header';
+import { BottomNavigation } from './components/BottomNavigation';
+import { Home, Spinner, Scoreboard, Profile, Rewards, Milestones } from './pages';
 import { useMiniApp } from './hooks/useMiniApp';
-import { useAppStore } from './stores';
+import { useAppStore } from './stores/useAppStore';
 
 const App = () => {
   const { isLoading } = useMiniApp();
@@ -15,6 +16,8 @@ const App = () => {
         return <Rewards />;
       case 'spinner':
         return <Spinner />;
+      case 'milestones':
+        return <Milestones />;
       case 'scoreboard':
         return <Scoreboard />;
       case 'profile':
@@ -33,10 +36,10 @@ const App = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    <div className="min-h-screen bg-gray-950 text-white flex flex-col relative">
       <Header />
       
-      <main className="flex-1 pb-20 pt-20">
+      <main className="flex-1 pb-20 pt-[70px] relative">
         {renderPage()}
       </main>
       

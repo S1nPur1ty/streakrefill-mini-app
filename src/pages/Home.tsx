@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { CircleNotch, Eye } from 'phosphor-react';
+import { CircleNotch, Eye, Tag } from 'phosphor-react';
 import { FaXbox, FaPlaystation, FaSteam } from 'react-icons/fa';
 import { SiNintendo } from 'react-icons/si';
 import { IoGameController } from 'react-icons/io5';
-import { ProductModal, ProductCard } from '../components';
+import { ProductModal } from '../components/ProductModal';
+import { ProductCard } from '../components/ProductCard';
 import { useBitrefillProducts } from '../hooks/useBitrefillProducts';
 import { BitrefillProduct, ProductCategory } from '../types/bitrefill';
-import { useAppStore } from '../stores';
+import { useAppStore } from '../stores/useAppStore';
 
 const CategoryTabs = ({ 
   activeCategory, 
@@ -124,7 +125,7 @@ const SortButton = ({
 
 export const Home = () => {
   const { products, productsLoading, productsError, refetchProducts } = useBitrefillProducts();
-  const { openProductModal, selectedProduct } = useAppStore();
+  const { openProductModal, selectedProduct, selectedCoupon, selectCoupon } = useAppStore();
   const [activeCategory, setActiveCategory] = useState('all');
   const [activeSort, setActiveSort] = useState('recommended');
   const [displayCount, setDisplayCount] = useState(10);
@@ -237,6 +238,36 @@ export const Home = () => {
         <div className="px-4 pb-4 mb-2">
           <h1 className="text-2xl font-bold text-white mb-2">Gift Cards</h1>
           <p className="text-gray-400">Purchase gaming gift cards with cryptocurrency</p>
+          
+          {selectedCoupon && (
+            <div className={`mt-4 p-4 rounded-lg border ${
+              selectedCoupon.type === 'discount' 
+                ? 'border-primary bg-primary/10' 
+                : 'border-secondary bg-secondary/10'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Tag size={20} className={selectedCoupon.type === 'discount' ? 'text-primary' : 'text-secondary'} />
+                  <div>
+                    <div className="font-medium text-white">
+                      Active Coupon: {selectedCoupon.type === 'discount' 
+                        ? `${selectedCoupon.value}% OFF` 
+                        : `$${selectedCoupon.value} FREE`}
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      {selectedCoupon.description}
+                    </div>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => selectCoupon(null)}
+                  className="text-xs text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 px-2 py-1 rounded"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Sticky Tabs and Sort Container */}

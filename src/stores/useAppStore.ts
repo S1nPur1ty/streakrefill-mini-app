@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { BitrefillProduct, ProductCategory } from '../types/bitrefill';
-import { Coupon, SpinnerPrize, SpinnerResult, CouponCategory } from '../types/coupon';
+import { WonCoupon, PurchaseRecord, DailySpinLimit } from '../types/spinner';
+import { getCurrentDateString } from '../lib';
+import { Reward } from '../types/database';
 
 interface AppState {
   // Navigation
@@ -13,10 +15,37 @@ interface AppState {
   walletAddress: string | null;
   setWalletInfo: (connected: boolean, address?: string) => void;
   
-  // Spinner
+  // Spinner System
   spinnerTickets: number;
+  wonCoupons: WonCoupon[];
+  purchaseHistory: PurchaseRecord[];
+  dailySpinLimits: DailySpinLimit[];
   addSpinnerTickets: (count: number) => void;
+  setSpinnerTickets: (count: number) => void; // New method to directly set tickets
   useSpinnerTicket: () => void;
+  addWonCoupon: (coupon: WonCoupon) => void;
+  syncRewardsFromSupabase: (rewards: Reward[]) => void; // New method to sync rewards from Supabase
+  useCoupon: (couponId: string) => void;
+  addPurchase: (amount: number) => void;
+  canSpin: () => boolean;
+  getTodaysSpinCount: () => number;
+  
+  // Streak System
+  currentStreak: number;
+  bestStreak: number;
+  lastPurchaseDate: string | null;
+  updateStreak: () => void;
+  
+  // Time Travel (for testing)
+  currentTestDate: Date | null;
+  isTimeTravelActive: boolean;
+  advanceDay: () => void;
+  resetToToday: () => void;
+  getFormattedTestDate: () => string;
+  
+  // Selected Coupon
+  selectedCoupon: WonCoupon | null;
+  selectCoupon: (coupon: WonCoupon | null) => void;
   
   // Mini App Detection
   isMiniApp: boolean | null;
@@ -41,24 +70,6 @@ interface AppState {
   openProductModal: (product: BitrefillProduct) => void;
   closeProductModal: () => void;
   
-  // Coupon System
-  coupons: Coupon[];
-  selectedCoupon: Coupon | null;
-  addCoupon: (coupon: Coupon) => void;
-  selectCoupon: (couponId: string) => void;
-  unselectCoupon: () => void;
-  useCoupon: (couponId: string) => void;
-  getCouponsByCategory: (category: CouponCategory) => Coupon[];
-  
-  // Spinner System
-  spinnerPrizes: SpinnerPrize[];
-  spinnerResults: SpinnerResult[];
-  isSpinning: boolean;
-  spinnerSpeed: 'normal' | 'instant';
-  addSpinnerResult: (result: SpinnerResult) => void;
-  setSpinning: (spinning: boolean) => void;
-  setSpinnerSpeed: (speed: 'normal' | 'instant') => void;
-  
   // Gift Cards (for future use)
   selectedGiftCardCategory: string;
   setGiftCardCategory: (category: string) => void;
@@ -70,29 +81,21 @@ interface AppState {
   addScore: (amount: number) => void;
 }
 
-// Body scroll control functions
-const disableBodyScroll = () => {
-  const body = document.body;
-  const scrollY = window.scrollY;
-  
-  body.style.position = 'fixed';
-  body.style.top = `-${scrollY}px`;
-  body.style.width = '100%';
-  body.style.overflow = 'hidden';
-};
-
-const enableBodyScroll = () => {
-  const body = document.body;
-  const scrollY = body.style.top;
-  
-  body.style.position = '';
-  body.style.top = '';
-  body.style.width = '';
-  body.style.overflow = '';
-  
-  if (scrollY) {
-    window.scrollTo(0, parseInt(scrollY || '0') * -1);
-  }
+// Helper function to convert Supabase Reward to WonCoupon
+const rewardToWonCoupon = (reward: Reward): WonCoupon => {
+  const isDiscount = reward.name?.includes('%');
+  return {
+    id: reward.id,
+    type: isDiscount ? 'discount' : 'freebie',
+    value: reward.amount,
+    title: reward.name || 'Reward',
+    description: isDiscount 
+      ? `Get ${reward.amount}% OFF on your next purchase` 
+      : `Free $${reward.amount} credit`,
+    expiresAt: new Date(new Date(reward.received_at).getTime() + 30 * 24 * 60 * 60 * 1000), // 30 days from received date
+    wonAt: new Date(reward.received_at),
+    used: reward.status === 'used'
+  };
 };
 
 export const useAppStore = create<AppState>()(
@@ -111,16 +114,200 @@ export const useAppStore = create<AppState>()(
           walletAddress: address || null 
         }),
       
-      // Spinner
-      spinnerTickets: 3, // Default starting tickets
+      // Spinner System
+      spinnerTickets: 0, // Default starting tickets
+      wonCoupons: [],
+      purchaseHistory: [],
+      dailySpinLimits: [],
+      
       addSpinnerTickets: (count) => 
         set((state) => ({ 
           spinnerTickets: state.spinnerTickets + count 
         })),
-      useSpinnerTicket: () => 
-        set((state) => ({ 
-          spinnerTickets: Math.max(0, state.spinnerTickets - 1) 
+      
+      // Direct setter for spinner tickets (for Supabase integration)
+      setSpinnerTickets: (count) => 
+        set({ spinnerTickets: count }),
+        
+      useSpinnerTicket: () => {
+        const state = get();
+        if (state.canSpin()) {
+          const today = getCurrentDateString();
+          const todayLimit = state.dailySpinLimits.find(limit => limit.date === today);
+          
+          set((state) => ({
+            spinnerTickets: Math.max(0, state.spinnerTickets - 1),
+            dailySpinLimits: state.dailySpinLimits.map(limit => 
+              limit.date === today 
+                ? { ...limit, ticketsUsed: limit.ticketsUsed + 1 }
+                : limit
+            ).concat(
+              !todayLimit ? [{ date: today, ticketsUsed: 1, maxTickets: 3 }] : []
+            )
+          }));
+        }
+      },
+      
+      addWonCoupon: (coupon) =>
+        set((state) => ({
+          wonCoupons: [...state.wonCoupons, coupon]
         })),
+        
+      useCoupon: async (couponId) => {
+        // First update local state
+        set((state) => ({
+          wonCoupons: state.wonCoupons.map(coupon =>
+            coupon.id === couponId ? { ...coupon, used: true } : coupon
+          )
+        }));
+        
+        // Then update in Supabase
+        try {
+          const { rewardService } = await import('../services/rewardService');
+          await rewardService.useReward(couponId);
+        } catch (error) {
+          console.error('Error marking coupon as used in database:', error);
+        }
+      },
+        
+      addPurchase: (amount) => {
+        const ticketsEarned = Math.floor(amount / 50);
+        const purchase: PurchaseRecord = {
+          id: Math.random().toString(36).substring(2, 9),
+          amount,
+          date: new Date(getCurrentDateString()), // Use current test date if available
+          ticketsEarned
+        };
+        
+        set((state) => ({
+          purchaseHistory: [...state.purchaseHistory, purchase],
+          spinnerTickets: state.spinnerTickets + ticketsEarned
+        }));
+        
+        // Update streak after a purchase
+        const state = get();
+        state.updateStreak();
+      },
+      
+      canSpin: () => {
+        const state = get();
+        const today = getCurrentDateString();
+        const todayLimit = state.dailySpinLimits.find(limit => limit.date === today);
+        const todaysSpins = todayLimit?.ticketsUsed || 0;
+        
+        return state.spinnerTickets > 0 && todaysSpins < 3;
+      },
+      
+      getTodaysSpinCount: () => {
+        const state = get();
+        const today = getCurrentDateString();
+        const todayLimit = state.dailySpinLimits.find(limit => limit.date === today);
+        return todayLimit?.ticketsUsed || 0;
+      },
+      
+      // Streak System
+      currentStreak: 0,
+      bestStreak: 0,
+      lastPurchaseDate: null,
+      
+      // Time Travel (for testing)
+      currentTestDate: null,
+      isTimeTravelActive: false,
+      
+      advanceDay: () => {
+        if (!import.meta.env.DEV) {
+          console.error('Time travel is only available in development mode');
+          return;
+        }
+        
+        set((state) => {
+          // If no test date is set, start with today
+          const baseDate = state.currentTestDate || new Date();
+          const newDate = new Date(baseDate);
+          newDate.setDate(newDate.getDate() + 1);
+          
+          console.log(`🕰️ Time Travel: Advanced to ${newDate.toDateString()}`);
+          
+          return { 
+            currentTestDate: newDate,
+            isTimeTravelActive: true 
+          };
+        });
+      },
+      
+      resetToToday: () => {
+        set({ 
+          currentTestDate: null,
+          isTimeTravelActive: false
+        });
+        console.log('🕰️ Time Travel: Reset to today');
+      },
+      
+      getFormattedTestDate: () => {
+        const state = get();
+        if (!state.currentTestDate) {
+          return new Date().toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          });
+        }
+        
+        return state.currentTestDate.toLocaleDateString('en-US', { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        });
+      },
+      
+      updateStreak: () => {
+        const today = getCurrentDateString();
+        const state = get();
+        
+        if (!state.lastPurchaseDate) {
+          // First purchase ever
+          set({ 
+            currentStreak: 1, 
+            bestStreak: 1, 
+            lastPurchaseDate: today 
+          });
+          return;
+        }
+        
+        if (state.lastPurchaseDate === today) {
+          // Already purchased today, streak doesn't change
+          return;
+        }
+        
+        // Check if the last purchase was yesterday
+        const lastDate = new Date(state.lastPurchaseDate);
+        const currentDate = new Date(today);
+        const timeDiff = currentDate.getTime() - lastDate.getTime();
+        const dayDiff = Math.floor(timeDiff / (1000 * 3600 * 24));
+        
+        if (dayDiff === 1) {
+          // Consecutive day, increase streak
+          const newStreak = state.currentStreak + 1;
+          set({ 
+            currentStreak: newStreak, 
+            bestStreak: Math.max(newStreak, state.bestStreak), 
+            lastPurchaseDate: today 
+          });
+        } else if (dayDiff > 1) {
+          // Streak broken, reset to 1
+          set({ 
+            currentStreak: 1, 
+            lastPurchaseDate: today 
+          });
+        }
+      },
+      
+      // Selected Coupon
+      selectedCoupon: null,
+      selectCoupon: (coupon) => 
+        set({ selectedCoupon: coupon }),
       
       // Mini App Detection
       isMiniApp: null,
@@ -161,81 +348,32 @@ export const useAppStore = create<AppState>()(
       // Modal State
       selectedProduct: null,
       openProductModal: (product) => {
-        disableBodyScroll();
         set({ selectedProduct: product });
       },
       closeProductModal: () => {
-        enableBodyScroll();
         set({ selectedProduct: null });
       },
       
-      // Coupon System
-      coupons: [],
-      selectedCoupon: null,
-      addCoupon: (coupon) => 
-        set((state) => ({ 
-          coupons: [...state.coupons, coupon] 
-        })),
-      selectCoupon: (couponId) => 
-        set((state) => {
-          const coupons = state.coupons.map(c => ({
-            ...c,
-            isSelected: c.id === couponId
-          }));
-          const selectedCoupon = coupons.find(c => c.id === couponId) || null;
-          return { coupons, selectedCoupon };
-        }),
-      unselectCoupon: () => 
-        set((state) => ({
-          coupons: state.coupons.map(c => ({ ...c, isSelected: false })),
-          selectedCoupon: null
-        })),
-      useCoupon: (couponId) => 
-        set((state) => ({
-          coupons: state.coupons.map(c => 
-            c.id === couponId ? { ...c, isUsed: true, isSelected: false } : c
-          ),
-          selectedCoupon: null
-        })),
-      getCouponsByCategory: (category: CouponCategory) => {
-        const state = get();
-        return state.coupons.filter(c => c.category === category && !c.isUsed);
-      },
-      
-      // Spinner System
-      spinnerPrizes: [
-        { text: "5% OFF", isInstantWin: true, probability: 20, color: "#f97066", coupon: undefined },
-        { text: "10% OFF", isInstantWin: true, probability: 15, color: "#2e90fa", coupon: undefined },
-        { text: "15% OFF", isInstantWin: true, probability: 10, color: "#fdb022", coupon: undefined },
-        { text: "20% OFF", isInstantWin: true, probability: 5, color: "#ee46bc", coupon: undefined },
-        { text: "Try Again", isInstantWin: false, probability: 30, color: "#8f7f8f", coupon: undefined },
-        { text: "Free Shipping", isInstantWin: true, probability: 15, color: "#00ff00", coupon: undefined },
-        { text: "Lucky Day!", isInstantWin: true, probability: 5, color: "#854CFF", coupon: undefined }
-      ],
-      spinnerResults: [],
-      isSpinning: false,
-      spinnerSpeed: 'normal',
-      addSpinnerResult: (result: SpinnerResult) => 
-        set((state) => ({ 
-          spinnerResults: [...state.spinnerResults, result] 
-        })),
-      setSpinning: (spinning: boolean) => 
-        set({ isSpinning: spinning }),
-      setSpinnerSpeed: (speed: 'normal' | 'instant') => 
-        set({ spinnerSpeed: speed }),
-      
       // Gift Cards
       selectedGiftCardCategory: 'all',
-      setGiftCardCategory: (category: string) => 
+      setGiftCardCategory: (category) => 
         set({ selectedGiftCardCategory: category }),
       
       // Scoreboard
       userXP: 0,
       userScore: 0,
-      addXP: (amount: number) => 
+      addXP: (amount) => 
         set((state) => ({ userXP: state.userXP + amount })),
-      addScore: (amount: number) => 
+      addScore: (amount) => 
         set((state) => ({ userScore: state.userScore + amount })),
+
+      // Sync rewards from Supabase
+      syncRewardsFromSupabase: (rewards: Reward[]) => {
+        const spinRewards = rewards.filter(reward => reward.reward_type === 'spin');
+        const wonCoupons = spinRewards.map(rewardToWonCoupon);
+        
+        set({ wonCoupons });
+      },
     }),
     {
       name: 'app-store',

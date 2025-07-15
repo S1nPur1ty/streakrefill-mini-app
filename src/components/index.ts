@@ -1,8 +1,11 @@
-export { ConnectMenu } from './ConnectMenu';
-export { SignButton } from './SignButton';
 export { Header } from './Header';
 export { BottomNavigation } from './BottomNavigation';
-export { ProductModal } from './ProductModal';
 export { ProductCard } from './ProductCard';
-export { default as SpinnerWheel } from './SpinnerWheel';
-export { CouponCard } from './CouponCard'; 
+export { ProductModal } from './ProductModal';
+export { SignButton } from './SignButton';
+export { ConnectMenu } from './ConnectMenu';
+export { SpinWheel } from './SpinWheel';
+export { WinningAnimation } from './WinningAnimation';
+export { Modal } from './Modal';
+export { HowItWorksModal } from './HowItWorksModal';
+export { TabGroup } from './TabGroup'; 

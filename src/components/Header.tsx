@@ -1,8 +1,7 @@
 import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { Wallet } from "phosphor-react";
+import { Wallet, Tag } from "phosphor-react";
 import { useEffect, useRef } from "react";
-import { useAppStore } from "../stores";
-// @ts-ignore
+import { useAppStore } from "../stores/useAppStore";
 import blockies from "ethereum-blockies";
 
 const BlockieAvatar = ({ address }: { address: string }) => {
@@ -33,7 +32,7 @@ export const Header = () => {
   const { isConnected, address } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  const { setWalletInfo } = useAppStore();
+  const { setWalletInfo, selectedCoupon, setActiveTab } = useAppStore();
 
   // Sync wallet state with Zustand store
   useEffect(() => {
@@ -48,42 +47,52 @@ export const Header = () => {
     }
   };
 
-  const { selectedCoupon } = useAppStore();
+  const handleCouponClick = () => {
+    // When clicking on the coupon tag, return to home page
+    setActiveTab('home');
+  };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-gray-950/80 backdrop-blur-lg">
-      {/* Selected Coupon Display */}
-      <div className="flex-1">
+    <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between p-4 bg-gray-950/80">
+      <div className="flex items-center gap-2">
         {selectedCoupon && (
-          <div className="flex items-center space-x-2 bg-primary/20 border border-primary/30 rounded-full px-3 py-1 max-w-xs">
-            <span className="text-sm">{selectedCoupon.icon || '🎁'}</span>
-            <span className="text-primary font-semibold text-xs truncate">
-              {selectedCoupon.title}
+          <button
+            onClick={handleCouponClick}
+            className={`flex items-center gap-2 px-3 py-2 rounded-full font-medium transition-colors 
+              ${selectedCoupon.type === 'discount' 
+                ? 'bg-primary/20 text-primary border border-primary/30' 
+                : 'bg-secondary/20 text-secondary border border-secondary/30'
+              }`}
+          >
+            <Tag size={16} />
+            <span className="text-sm font-semibold">
+              {selectedCoupon.type === 'discount' 
+                ? `${selectedCoupon.value}% OFF` 
+                : `$${selectedCoupon.value} FREE`
+              }
             </span>
-            <span className="text-primary text-xs">
-              {selectedCoupon.discountPercent}% OFF
-            </span>
-          </div>
+          </button>
         )}
       </div>
-
-      {/* Wallet Button */}
-      <button
-        onClick={handleWalletClick}
-        className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-primary/20 text-white hover:text-primary rounded-full font-medium transition-colors border border-white/10 hover:border-primary/30"
-      >
-        {isConnected ? (
-          <>
-            <BlockieAvatar address={address || ''} />
-            <span className="text-sm">{address?.slice(0, 6)}...{address?.slice(-4)}</span>
-          </>
-        ) : (
-          <>
-            <Wallet size={20} />
-            <span className="text-sm">Connect</span>
-          </>
-        )}
-      </button>
+      
+      <div>
+        <button
+          onClick={handleWalletClick}
+          className="flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-primary/20 text-white hover:text-primary rounded-full font-medium transition-colors border border-white/10 hover:border-primary/30"
+        >
+          {isConnected ? (
+            <>
+              <BlockieAvatar address={address || ''} />
+              <span className="text-sm">{address?.slice(0, 6)}...{address?.slice(-4)}</span>
+            </>
+          ) : (
+            <>
+              <Wallet size={20} />
+              <span className="text-sm">Connect</span>
+            </>
+          )}
+        </button>
+      </div>
     </header>
   );
 }; 

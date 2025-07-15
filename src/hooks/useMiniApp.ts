@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { sdk } from "@farcaster/miniapp-sdk";
-import { useAppStore } from "../stores";
+import { useAppStore } from "../stores/useAppStore";
 
 export const useMiniApp = () => {
   const { isMiniApp, isLoading, setMiniAppStatus } = useAppStore();
