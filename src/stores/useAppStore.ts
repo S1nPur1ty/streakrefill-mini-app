@@ -79,6 +79,9 @@ interface AppState {
   userScore: number;
   addXP: (amount: number) => void;
   addScore: (amount: number) => void;
+
+  // Rewards counter
+  getUnusedRewardsCount: () => number;
 }
 
 // Helper function to convert Supabase Reward to WonCoupon
@@ -369,10 +372,27 @@ export const useAppStore = create<AppState>()(
 
       // Sync rewards from Supabase
       syncRewardsFromSupabase: (rewards: Reward[]) => {
-        const spinRewards = rewards.filter(reward => reward.reward_type === 'spin');
-        const wonCoupons = spinRewards.map(rewardToWonCoupon);
+        console.log('🔄 Syncing rewards from Supabase:', rewards);
+        
+        // Include both spin rewards and claimed streak rewards (milestone rewards)
+        const usableRewards = rewards.filter(reward => 
+          reward.reward_type === 'spin' || 
+          (reward.reward_type === 'streak' && reward.status === 'claimed')
+        );
+        
+        console.log('✅ Usable rewards (spin + claimed streak):', usableRewards);
+        
+        const wonCoupons = usableRewards.map(rewardToWonCoupon);
+        
+        console.log('🎫 Converted to won coupons:', wonCoupons);
         
         set({ wonCoupons });
+      },
+
+      // Get count of unused rewards for bottom navigation counter
+      getUnusedRewardsCount: () => {
+        const state = get();
+        return state.wonCoupons.filter(coupon => !coupon.used).length;
       },
     }),
     {

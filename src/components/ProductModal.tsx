@@ -1,12 +1,16 @@
+import { useState } from 'react';
 import { FaXbox, FaPlaystation, FaSteam } from 'react-icons/fa';
 import { SiNintendo } from 'react-icons/si';
 import { IoGameController } from 'react-icons/io5';
-import { Tag } from 'phosphor-react';
+import { Tag, SpinnerGap, ShoppingCart } from 'phosphor-react';
 import { useAppStore } from '../stores/useAppStore';
+import { useSupabaseUser } from '../hooks/useSupabaseUser';
 import { Modal } from './Modal';
 
 export const ProductModal = () => {
-  const { selectedProduct, closeProductModal, selectedCoupon } = useAppStore();
+  const { selectedProduct, closeProductModal, selectedCoupon, useCoupon } = useAppStore();
+  const { user, createPurchase, refreshData } = useSupabaseUser();
+  const [purchasing, setPurchasing] = useState<string | null>(null);
 
   // Don't render if no product is selected
   if (!selectedProduct) return null;
@@ -33,6 +37,56 @@ export const ProductModal = () => {
     }
     
     return originalPrice;
+  };
+
+  // Handle purchase with coupon discount
+  const handlePurchase = async (pkg: any) => {
+    if (!user) {
+      console.error('Please connect your wallet first to make a purchase.');
+      return;
+    }
+
+    const originalPrice = pkg.price / 100;
+    const finalPrice = calculatePrice(pkg.price) / 100;
+    
+    setPurchasing(pkg.id);
+    
+    try {
+      // Create the purchase with the final discounted price
+      const purchaseResult = await createPurchase(
+        finalPrice,
+        selectedProduct.currency || 'USD',
+        `${selectedProduct.name} - ${pkg.value} ${selectedProduct.currency || 'USD'}`,
+        'Gaming'
+      );
+      
+      if (purchaseResult) {
+        // If a coupon was used, mark it as used
+        if (selectedCoupon && finalPrice < originalPrice) {
+          useCoupon(selectedCoupon.id);
+          const discountType = selectedCoupon.type === 'discount' 
+            ? `${selectedCoupon.value}% discount` 
+            : `$${selectedCoupon.value} credit`;
+          const savings = (originalPrice - finalPrice).toFixed(2);
+          console.log(`Applied ${discountType} - Saved $${savings}`);
+        }
+        
+        // Refresh data to update UI
+        await refreshData();
+        
+        // Close modal after successful purchase
+        closeProductModal();
+        
+        console.log(`Successfully purchased ${selectedProduct.name} for $${finalPrice.toFixed(2)}`);
+      } else {
+        console.error('Purchase failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Purchase error:', error);
+      console.error('An error occurred during purchase. Please try again.');
+    } finally {
+      setPurchasing(null);
+    }
   };
 
   // Title component with product info
@@ -83,26 +137,43 @@ export const ProductModal = () => {
                     {hasDiscount ? (
                       <>
                         <div className="text-primary font-bold text-lg">
-                          {discountedPrice.toFixed(2)} {selectedProduct.currency || 'USD'}
+                          ${discountedPrice.toFixed(2)}
                         </div>
                         <div className="text-gray-400 text-sm line-through">
-                          {originalPrice.toFixed(2)} {selectedProduct.currency || 'USD'}
+                          ${originalPrice.toFixed(2)}
+                        </div>
+                        <div className="text-green-500 text-sm font-medium">
+                          Save ${(originalPrice - discountedPrice).toFixed(2)}
                         </div>
                       </>
                     ) : (
                       <div className="text-primary font-bold text-lg">
-                        {originalPrice.toFixed(2)} {selectedProduct.currency || 'USD'}
+                        ${originalPrice.toFixed(2)}
                       </div>
                     )}
                   </div>
                   <p className="text-gray-400 text-sm">
-                    Value: {pkg.value} {selectedProduct.currency || 'USD'}
+                    Value: ${pkg.value}
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-gray-400 text-sm">Stock: {pkg.amount}</p>
-                  <button className="bg-primary hover:bg-secondary text-black px-4 py-2 rounded-lg text-sm font-medium transition-colors mt-2">
-                    Select
+                  <button 
+                    onClick={() => handlePurchase(pkg)}
+                    disabled={purchasing === pkg.id || !user}
+                    className="bg-primary hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed text-black px-4 py-2 rounded-lg text-sm font-medium transition-colors mt-2 flex items-center gap-2"
+                  >
+                    {purchasing === pkg.id ? (
+                      <>
+                        <SpinnerGap size={16} className="animate-spin" />
+                        <span>Purchasing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShoppingCart size={16} weight="fill" />
+                        <span>{!user ? 'Connect Wallet' : 'Purchase'}</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -125,4 +196,4 @@ export const ProductModal = () => {
       {content}
     </Modal>
   );
-}; 
+};

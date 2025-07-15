@@ -5,7 +5,15 @@ import * as PhosphorIcons from 'phosphor-react';
 type TabIconName = keyof typeof PhosphorIcons;
 
 export const BottomNavigation = () => {
-  const { activeTab, setActiveTab, spinnerTickets } = useAppStore();
+  const { activeTab, setActiveTab, spinnerTickets, getUnusedRewardsCount } = useAppStore();
+  const unusedRewardsCount = getUnusedRewardsCount();
+  
+  // Debug logging to track counter updates
+  console.log('🔢 Bottom Navigation Counters:', {
+    spinnerTickets,
+    unusedRewardsCount,
+    timestamp: new Date().toLocaleTimeString()
+  });
 
   const tabs = [
     { id: 'home', label: 'Home', icon: 'ShoppingCart' as TabIconName },
@@ -50,6 +58,11 @@ export const BottomNavigation = () => {
                     {tab.id === 'spinner' && spinnerTickets > 0 && (
                         <div className="absolute -top-1 -right-1 bg-primary text-black text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
                           {spinnerTickets > 9 ? '9+' : spinnerTickets}
+                        </div>
+                    )}
+                    {tab.id === 'rewards' && unusedRewardsCount > 0 && (
+                        <div className="absolute -top-1 -right-1 bg-secondary text-black text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                          {unusedRewardsCount > 9 ? '9+' : unusedRewardsCount}
                         </div>
                     )}
                   </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { WonCoupon } from '../types/spinner';
 import { Ticket, Clock } from 'phosphor-react';
 import { useSupabaseUser } from '../hooks/useSupabaseUser';
@@ -8,121 +8,49 @@ import { HowItWorksModal } from '../components/HowItWorksModal';
 import { SpinWheel } from '../components/SpinWheel';
 import { DevToolsModal } from '../components/DevToolsModal';
 import { WinningAnimation } from '../components/WinningAnimation';
+import { SpinnerSkeleton } from '../components/SkeletonLoader';
 
 export const Spinner = () => {
   const [winningCoupon, setWinningCoupon] = useState<WonCoupon | null>(null);
-  const [localSpinLimit, setLocalSpinLimit] = useState({ used: 0, max: 0 });
-  const [loading, setLoading] = useState(true);
-  const { user, spinLimit, getSpinLimit, refreshData } = useSupabaseUser();
+  const { user, spinLimit, useSpin } = useSupabaseUser();
   const { setSpinnerTickets } = useAppStore();
   const { isTimeTravelActive, formattedDate, isDev } = useTimeTravel();
-  const initialLoadRef = useRef(true);
 
-  // Calculate remaining spins
-  const remainingSpins = Math.max(0, localSpinLimit.max - localSpinLimit.used);
+  // Debug logging to see what's happening
+  console.log('Spinner Debug:', { user: !!user, spinLimit, loading: !user });
 
-  // Update spinner tickets in global store
+  // Use spinLimit directly from useSupabaseUser - no local state needed
+  const currentSpinLimit = spinLimit
+    ? { used: spinLimit.used, max: spinLimit.max_spins }
+    : { used: 0, max: 0 };
+  const remainingSpins = Math.max(0, currentSpinLimit.max - currentSpinLimit.used);
+
+  // Only require user to be loaded - spinLimit can be null if user has no spins yet
+  const loading = !user;
+
+  // Update spinner tickets in global store - only when remainingSpins actually changes
   useEffect(() => {
     setSpinnerTickets(remainingSpins);
   }, [remainingSpins, setSpinnerTickets]);
 
-  // Update local spin limit whenever the spinLimit from useSupabaseUser changes
-  useEffect(() => {
-    if (spinLimit) {
-      setLocalSpinLimit({
-        used: spinLimit.used,
-        max: spinLimit.max_spins
-      });
-      setLoading(false);
-      initialLoadRef.current = false;
-    } else if (!loading && initialLoadRef.current) {
-      // If we don't have a spinLimit yet and we're still on initial load, fetch it
-      loadSpinData();
-    }
-  }, [spinLimit]);
-
-  // Load spin data from database
-  const loadSpinData = useCallback(async () => {
-    if (!user) {
-      setLocalSpinLimit({ used: 0, max: 0 });
-      setLoading(false);
-      initialLoadRef.current = false;
-      return;
-    }
-
-    // Only show loading on first load
-    if (initialLoadRef.current) {
-      setLoading(true);
-    }
-    
-    try {
-      console.log('Loading spin data...');
-      const spinLimitData = await getSpinLimit();
-      if (spinLimitData) {
-        console.log('Spin data loaded:', spinLimitData);
-        setLocalSpinLimit({
-          used: spinLimitData.used,
-          max: spinLimitData.max_spins
-        });
-      } else {
-        setLocalSpinLimit({ used: 0, max: 0 });
-      }
-      initialLoadRef.current = false;
-    } catch (error) {
-      console.error("Failed to load spin data:", error);
-      setLocalSpinLimit({ used: 0, max: 0 });
-    } finally {
-      setLoading(false);
-    }
-  }, [user, getSpinLimit]);
-
-  // Comprehensive data refresh function
-  const refreshAllData = useCallback(async () => {
-    if (!user) return;
-    
-    console.log('Refreshing all spinner data...');
-    
-    try {
-      // First refresh user data (stats, streak, etc.)
-      await refreshData();
-      // Then refresh spinner-specific data
-      await loadSpinData();
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-    }
-  }, [user, refreshData, loadSpinData]);
-
-  // Handle data changes from DevToolsModal
-  const handleDataChange = useCallback(() => {
-    console.log('Data change detected, refreshing...');
-    // Do a full refresh when DevToolsModal changes data
-    refreshAllData();
-  }, [refreshAllData]);
-
-  // Initial data load
-  useEffect(() => {
-    if (initialLoadRef.current) {
-      loadSpinData();
-    }
-  }, [loadSpinData]);
-
-  // Effect to reload data when time travel status changes
-  useEffect(() => {
-    if (user && isTimeTravelActive !== undefined) {
-      console.log('Time travel status changed, refreshing data...');
-      refreshAllData();
-    }
-  }, [isTimeTravelActive, user, refreshAllData]);
-
   const handleWin = useCallback((coupon: WonCoupon) => {
     setWinningCoupon(coupon);
-    // Refresh data after winning to update UI
-    loadSpinData();
-  }, [loadSpinData]);
+  }, []);
 
   const handleCloseWinning = useCallback(() => {
     setWinningCoupon(null);
   }, []);
+
+  // Simple data change handler - no debouncing needed since useSupabaseUser handles it
+  const handleDataChange = useCallback(() => {
+    // The useSupabaseUser hook will handle the refresh automatically
+    console.log('Dev tools data change - useSupabaseUser will handle refresh');
+  }, []);
+
+  // Show skeleton loader during initial load
+  if (loading) {
+    return <SpinnerSkeleton />;
+  }
 
   return (
     <div className="flex-1 p-4">
@@ -138,7 +66,7 @@ export const Spinner = () => {
           </div>
         </div>
       )}
-      
+
       <div className="max-w-2xl mx-auto space-y-4">
         {/* Header */}
         <div className="relative text-center">
@@ -157,18 +85,20 @@ export const Spinner = () => {
           <div className="bg-gray-800/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-gray-700 flex items-center gap-1.5">
             <Ticket size={18} className="text-primary" weight="fill" />
             <span className="text-white font-medium">
-              {loading ? 
-                "Loading..." : 
+              {loading ?
+                "Loading..." :
                 `${remainingSpins} ${remainingSpins === 1 ? 'Ticket' : 'Tickets'}`
               }
             </span>
           </div>
         </div>
 
-        <SpinWheel 
-          onWin={handleWin} 
-          spinLimit={localSpinLimit}
+        <SpinWheel
+          onWin={handleWin}
+          spinLimit={currentSpinLimit}
           loading={loading}
+          user={user}
+          useSpin={useSpin}
         />
       </div>
 
@@ -179,9 +109,9 @@ export const Spinner = () => {
 
       {/* Winning Animation */}
       {winningCoupon && (
-        <WinningAnimation 
-          coupon={winningCoupon} 
-          onClose={handleCloseWinning} 
+        <WinningAnimation
+          coupon={winningCoupon}
+          onClose={handleCloseWinning}
         />
       )}
     </div>

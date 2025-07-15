@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { useAppStore } from '../stores/useAppStore';
 import { userService } from '../services/userService';
@@ -21,53 +21,14 @@ export const useSupabaseUser = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Function to refresh all user data
-  const refreshData = useCallback(async () => {
-    if (!user) return;
-    
-    setLoading(true);
-    setError(null);
+  // Prevent duplicate fetches
+  const isFetchingRef = useRef(false);
+  const currentAddressRef = useRef<string | null>(null);
 
-    try {
-      // Use Promise.all to fetch data in parallel
-      const [userStats, userStreak, userRewards, userPurchases, spinRewards, userSpinLimit] = await Promise.all([
-        statsService.getUserStats(user.id),
-        streakService.getUserStreak(user.id),
-        streakService.getUserStreakRewards(user.id),
-        purchaseService.getUserPurchases(user.id, 5),
-        rewardService.getUserRewards(user.id),
-        purchaseService.getTodaySpinLimits(user.id)
-      ]);
-      
-      // Update all state at once to minimize re-renders
-      setStats(userStats);
-      setStreak(userStreak);
-      setRewards(userRewards);
-      setPurchases(userPurchases);
-      setSpinLimit(userSpinLimit);
-      
-      // Sync spin rewards to app store
-      syncRewardsFromSupabase(spinRewards);
-      
-      // Update spinner tickets in global store
-      if (userSpinLimit) {
-        const remainingSpins = Math.max(0, userSpinLimit.max_spins - userSpinLimit.used);
-        setSpinnerTickets(remainingSpins);
-      }
-      
-      return { success: true };
-    } catch (err) {
-      console.error('Error refreshing user data:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error occurred while refreshing');
-      return { success: false, error: err };
-    } finally {
-      setLoading(false);
-    }
-  }, [user, syncRewardsFromSupabase, setSpinnerTickets]);
-
-  // Fetch user data when address changes
+  // Main data fetching effect - ONLY runs when address/connection changes
   useEffect(() => {
     const fetchUserData = async () => {
+      // Handle disconnection
       if (!address || !isConnected) {
         setUser(null);
         setStats(null);
@@ -76,23 +37,34 @@ export const useSupabaseUser = () => {
         setPurchases([]);
         setSpinLimit(null);
         setLoading(false);
+        setError(null);
+        currentAddressRef.current = null;
+        isFetchingRef.current = false;
         return;
       }
 
+      // Prevent duplicate calls for same address
+      if (isFetchingRef.current || currentAddressRef.current === address) {
+        return;
+      }
+
+      isFetchingRef.current = true;
+      currentAddressRef.current = address;
       setLoading(true);
       setError(null);
 
       try {
-        // Get or create user by wallet address
-        const userData = await userService.getOrCreateUserByWallet(address);
+        console.log(`🔄 Fetching user data for: ${address}`);
         
+        // Get or create user
+        const userData = await userService.getOrCreateUserByWallet(address);
         if (!userData) {
           throw new Error('Failed to get or create user');
         }
 
         setUser(userData);
-        
-        // Use Promise.all to fetch data in parallel
+
+        // Fetch all data in parallel
         const [userStats, userStreak, userRewards, userPurchases, spinRewards, userSpinLimit] = await Promise.all([
           statsService.getUserStats(userData.id),
           streakService.getUserStreak(userData.id),
@@ -101,38 +73,105 @@ export const useSupabaseUser = () => {
           rewardService.getUserRewards(userData.id),
           purchaseService.getTodaySpinLimits(userData.id)
         ]);
-        
-        // Update all state at once
+
+        // Update all state
         setStats(userStats);
         setStreak(userStreak);
         setRewards(userRewards);
         setPurchases(userPurchases);
         setSpinLimit(userSpinLimit);
-        
-        // Sync spin rewards to app store
+
+        // Update app store
         syncRewardsFromSupabase(spinRewards);
+        setWalletInfo(true, address);
         
-        // Update spinner tickets in global store
         if (userSpinLimit) {
           const remainingSpins = Math.max(0, userSpinLimit.max_spins - userSpinLimit.used);
           setSpinnerTickets(remainingSpins);
         }
 
-        // Update store with connected status
-        setWalletInfo(true, address);
+        console.log(`✅ Successfully loaded data for: ${address}`);
       } catch (err) {
-        console.error('Error fetching user data:', err);
-        setError(err instanceof Error ? err.message : 'Unknown error occurred');
+        console.error('❌ Error fetching user data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load user data');
       } finally {
         setLoading(false);
+        isFetchingRef.current = false;
       }
     };
 
     fetchUserData();
   }, [address, isConnected, setWalletInfo, syncRewardsFromSupabase, setSpinnerTickets]);
 
-  // Function to create a purchase and update user data
-  const createPurchase = async (
+  // Simple refresh function - no complex dependencies
+  const refreshData = useCallback(async () => {
+    if (!user || isFetchingRef.current) {
+      return { success: false };
+    }
+
+    try {
+      // Just refetch the spin limit and rewards - most commonly updated data
+      const [spinRewards, userSpinLimit] = await Promise.all([
+        rewardService.getUserRewards(user.id),
+        purchaseService.getTodaySpinLimits(user.id)
+      ]);
+
+      setSpinLimit(userSpinLimit);
+      syncRewardsFromSupabase(spinRewards);
+      
+      if (userSpinLimit) {
+        const remainingSpins = Math.max(0, userSpinLimit.max_spins - userSpinLimit.used);
+        setSpinnerTickets(remainingSpins);
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error('Error refreshing data:', err);
+      return { success: false, error: err };
+    }
+  }, [user, syncRewardsFromSupabase, setSpinnerTickets]);
+
+  // Simple spin limit getter
+  const getSpinLimit = useCallback(async () => {
+    if (!user) return null;
+    
+    try {
+      const limit = await purchaseService.getTodaySpinLimits(user.id);
+      setSpinLimit(limit);
+      
+      if (limit) {
+        const remainingSpins = Math.max(0, limit.max_spins - limit.used);
+        setSpinnerTickets(remainingSpins);
+      }
+      
+      return limit;
+    } catch (err) {
+      console.error('Error getting spin limit:', err);
+      return null;
+    }
+  }, [user, setSpinnerTickets]);
+
+  // Simple spin function
+  const useSpin = useCallback(async () => {
+    if (!user) return false;
+
+    try {
+      const success = await purchaseService.useSpinTicket(user.id);
+      
+      if (success) {
+        // Update spin limit immediately
+        await getSpinLimit();
+      }
+      
+      return success;
+    } catch (err) {
+      console.error('Error using spin:', err);
+      return false;
+    }
+  }, [user, getSpinLimit]);
+
+  // Simple purchase creation
+  const createPurchase = useCallback(async (
     amount: number, 
     currency: string = 'USD', 
     name?: string, 
@@ -153,7 +192,6 @@ export const useSupabaseUser = () => {
       );
 
       if (purchase) {
-        // Refresh user data
         await refreshData();
         return purchase;
       }
@@ -163,63 +201,20 @@ export const useSupabaseUser = () => {
       setError(err instanceof Error ? err.message : 'Unknown error occurred');
       return null;
     }
-  };
+  }, [user, refreshData]);
 
-  // Function to check if user can spin today
-  const canSpin = async () => {
-    if (!user) {
-      return false;
-    }
+  // Simple can spin check
+  const canSpin = useCallback(async () => {
+    if (!user) return false;
 
     try {
-      const spinLimit = await purchaseService.getTodaySpinLimits(user.id);
-      if (!spinLimit) {
-        return false;
-      }
-
-      return spinLimit.used < spinLimit.max_spins;
+      const limit = await purchaseService.getTodaySpinLimits(user.id);
+      return limit ? limit.used < limit.max_spins : false;
     } catch (err) {
       console.error('Error checking spin eligibility:', err);
       return false;
     }
-  };
-
-  // Function to get today's spin limit
-  const getSpinLimit = useCallback(async () => {
-    if (!user) return null;
-    
-    try {
-      const limit = await purchaseService.getTodaySpinLimits(user.id);
-      setSpinLimit(limit);
-      
-      // Update spinner tickets in global store
-      if (limit) {
-        const remainingSpins = Math.max(0, limit.max_spins - limit.used);
-        setSpinnerTickets(remainingSpins);
-      }
-      
-      return limit;
-    } catch (err) {
-      console.error('Error getting spin limit:', err);
-      return null;
-    }
-  }, [user, setSpinnerTickets]);
-
-  // Function to use a spin
-  const useSpin = async () => {
-    if (!user) {
-      return false;
-    }
-
-    const success = await purchaseService.useSpinTicket(user.id);
-    
-    // Update local spin limit after using a ticket
-    if (success) {
-      await getSpinLimit();
-    }
-    
-    return success;
-  };
+  }, [user]);
 
   return {
     user,
@@ -236,4 +231,4 @@ export const useSupabaseUser = () => {
     refreshData,
     getSpinLimit
   };
-}; 
+};

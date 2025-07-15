@@ -1,31 +1,45 @@
+import React, { useMemo } from 'react';
 import { Header } from './components/Header';
 import { BottomNavigation } from './components/BottomNavigation';
 import { Home, Spinner, Scoreboard, Profile, Rewards, Milestones } from './pages';
 import { useMiniApp } from './hooks/useMiniApp';
 import { useAppStore } from './stores/useAppStore';
+import { useSupabaseUser } from './hooks/useSupabaseUser';
+
+// Memoized page components to prevent unnecessary re-renders
+const MemoizedHome = React.memo(Home);
+const MemoizedRewards = React.memo(Rewards);
+const MemoizedSpinner = React.memo(Spinner);
+const MemoizedMilestones = React.memo(Milestones);
+const MemoizedScoreboard = React.memo(Scoreboard);
+const MemoizedProfile = React.memo(Profile);
 
 const App = () => {
   const { isLoading } = useMiniApp();
   const { activeTab } = useAppStore();
+  
+  // Initialize user data at app level so counters work immediately
+  useSupabaseUser();
 
-  const renderPage = () => {
+  // Memoize page rendering to prevent unnecessary re-renders
+  const currentPage = useMemo(() => {
     switch (activeTab) {
       case 'home':
-        return <Home />;
+        return <MemoizedHome />;
       case 'rewards':
-        return <Rewards />;
+        return <MemoizedRewards />;
       case 'spinner':
-        return <Spinner />;
+        return <MemoizedSpinner />;
       case 'milestones':
-        return <Milestones />;
+        return <MemoizedMilestones />;
       case 'scoreboard':
-        return <Scoreboard />;
+        return <MemoizedScoreboard />;
       case 'profile':
-        return <Profile />;
+        return <MemoizedProfile />;
       default:
-        return <Home />;
+        return <MemoizedHome />;
     }
-  };
+  }, [activeTab]);
 
   if (isLoading) {
     return (
@@ -40,7 +54,7 @@ const App = () => {
       <Header />
       
       <main className="flex-1 pb-20 pt-[70px] relative">
-        {renderPage()}
+        {currentPage}
       </main>
       
       <BottomNavigation />
@@ -48,4 +62,4 @@ const App = () => {
   );
 };
 
-export default App;
+export default React.memo(App);

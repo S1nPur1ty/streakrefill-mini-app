@@ -1,8 +1,7 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Wheel } from 'react-custom-roulette';
 import { useAppStore } from '../stores/useAppStore';
 import { SpinWheelData, WonCoupon } from '../types/spinner';
-import { useSupabaseUser } from '../hooks/useSupabaseUser';
 import { rewardService } from '../services/rewardService';
 import { statsService } from '../services/statsService';
 
@@ -10,6 +9,8 @@ interface SpinWheelProps {
   onWin: (coupon: WonCoupon) => void;
   spinLimit: { used: number, max: number };
   loading: boolean;
+  user: any;
+  useSpin: () => Promise<boolean>;
 }
 
 const wheelData: SpinWheelData[] = [
@@ -65,9 +66,8 @@ const wheelData: SpinWheelData[] = [
 
 const prizeWeights = [15, 20, 10, 15, 8, 25, 5, 2, 14, 10, 10, 10]; // Higher numbers = more likely
 
-export const SpinWheel = ({ onWin, spinLimit, loading }: SpinWheelProps) => {
+export const SpinWheel = ({ onWin, spinLimit, loading, user, useSpin }: SpinWheelProps) => {
   const { addWonCoupon } = useAppStore();
-  const { user, useSpin, refreshData } = useSupabaseUser();
   
   const [mustSpin, setMustSpin] = useState(false);
   const [prizeNumber, setPrizeNumber] = useState(0);
@@ -80,35 +80,31 @@ export const SpinWheel = ({ onWin, spinLimit, loading }: SpinWheelProps) => {
   // Calculate remaining spins
   const remainingSpins = Math.max(0, spinLimit.max - spinLimit.used);
 
-  // Update can spin status whenever spin limit or spinning status changes
-  // Use a more stable approach that doesn't cause flickering
-  useEffect(() => {
-    // Skip the first render if we're still loading
-    if (loading && !initializedRef.current) {
-      return;
-    }
-    
-    initializedRef.current = true;
-    
-    // Only update if not spinning to prevent interruptions
-    if (!isSpinning) {
-      const canSpin = remainingSpins > 0;
-      setCanSpinNow(canSpin);
-    }
+  // Memoized can spin calculation to prevent unnecessary updates
+  const canSpinCalculated = useMemo(() => {
+    if (loading || !initializedRef.current) return false;
+    return remainingSpins > 0 && !isSpinning;
   }, [remainingSpins, isSpinning, loading]);
 
-  // Check if spin limit has changed
+  // Update can spin status only when calculation changes
+  useEffect(() => {
+    if (!loading) {
+      initializedRef.current = true;
+      setCanSpinNow(canSpinCalculated);
+    }
+  }, [canSpinCalculated, loading]);
+
+  // Optimized spin limit change detection
   useEffect(() => {
     const prevLimit = prevSpinLimitRef.current;
-    const limitChanged = 
+    const hasSignificantChange = 
       prevLimit.max !== spinLimit.max || 
       prevLimit.used !== spinLimit.used;
     
-    if (limitChanged && !loading) {
+    if (hasSignificantChange && !loading) {
       prevSpinLimitRef.current = spinLimit;
-      // Only log significant changes to reduce console noise
-      if (Math.abs(prevLimit.max - spinLimit.max) > 0 || 
-          Math.abs(prevLimit.used - spinLimit.used) > 0) {
+      // Only log when there's actual change and not initial state
+      if (prevLimit.max !== 0 || prevLimit.used !== 0) {
         console.log('Spin limit updated:', spinLimit);
       }
     }
@@ -169,27 +165,25 @@ export const SpinWheel = ({ onWin, spinLimit, loading }: SpinWheelProps) => {
       // Store in local state for UI
       addWonCoupon(coupon);
       
-      // Store in database
+      // Store in database (fire and forget - don't block UI)
       if (user) {
-        // Create reward in database
-        const savedReward = await rewardService.createSpinReward(
-          user.id,
-          coupon.value,
-          coupon.title,
-          'common', // Rarity
-          wonPrize.style.backgroundColor // Color
-        );
-        
-        // Record spin win in stats
-        await statsService.recordSpinWin(user.id, coupon.value);
-        
-        if (savedReward) {
-          // Update the coupon with the database ID
-          coupon.id = savedReward.id;
-          
-          // Refresh user data to get updated rewards
-          await refreshData();
-        }
+        Promise.all([
+          rewardService.createSpinReward(
+            user.id,
+            coupon.value,
+            coupon.title,
+            'common', // Rarity
+            wonPrize.style.backgroundColor // Color
+          ),
+          statsService.recordSpinWin(user.id, coupon.value)
+        ]).then(([savedReward]) => {
+          if (savedReward) {
+            // Update the coupon with the database ID
+            coupon.id = savedReward.id;
+          }
+        }).catch(error => {
+          console.error('Error saving spin reward:', error);
+        });
       }
       
       onWin(coupon);
@@ -206,7 +200,7 @@ export const SpinWheel = ({ onWin, spinLimit, loading }: SpinWheelProps) => {
         used: true
       });
     }
-  }, [prizeNumber, addWonCoupon, onWin, user, useSpin, refreshData]);
+  }, [prizeNumber, addWonCoupon, onWin, user]);
 
   return (
     <div className="flex flex-col items-center space-y-4">
@@ -272,4 +266,4 @@ export const SpinWheel = ({ onWin, spinLimit, loading }: SpinWheelProps) => {
       </div>
     </div>
   );
-}; 
+};

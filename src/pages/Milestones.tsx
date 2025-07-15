@@ -1,4 +1,7 @@
+import { useState } from 'react';
+import { useSupabaseUser } from "../hooks/useSupabaseUser";
 import { useAppStore } from "../stores/useAppStore";
+import { streakService } from "../services/streakService";
 import {
   Star, 
   Fire, 
@@ -7,19 +10,47 @@ import {
   CircleNotch, 
   CheckCircle, 
   Circle, 
-  Target
+  Target,
+  SpinnerGap
 } from "phosphor-react";
 
 export const Milestones = () => {
-  const { 
-    currentStreak, 
-    bestStreak, 
-    purchaseHistory,
-    wonCoupons
-  } = useAppStore();
+  const { user, stats, streak, rewards, purchases, loading, refreshData } = useSupabaseUser();
+  const { wonCoupons } = useAppStore();
+  const [claimingReward, setClaimingReward] = useState<string | null>(null);
 
-  // Calculate stats
-  const totalSpent = purchaseHistory.reduce((sum, purchase) => sum + purchase.amount, 0);
+  // Debug logging to track data updates
+  console.log('Milestones Debug:', {
+    user: !!user,
+    stats: stats ? { level: stats.level, xp: stats.xp } : null,
+    streak: streak ? { current: streak.current, best: streak.best } : null,
+    rewardsCount: rewards.length,
+    purchasesCount: purchases.length
+  });
+
+  // Return loading state if data isn't ready
+  if (loading || !user || !stats || !streak) {
+    return (
+      <div className="flex-1 p-4 pb-24">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-700 rounded w-48 mb-2"></div>
+            <div className="h-4 bg-gray-700 rounded w-64"></div>
+          </div>
+          <div className="bg-gray-800 rounded-2xl p-5 border border-gray-700">
+            <div className="animate-pulse space-y-4">
+              <div className="h-8 bg-gray-700 rounded w-32"></div>
+              <div className="h-3 bg-gray-700 rounded"></div>
+              <div className="h-4 bg-gray-700 rounded w-24"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate stats from real data
+  const totalSpent = purchases.reduce((sum, purchase) => sum + purchase.amount, 0);
   const spinWinningsValue = wonCoupons
     .filter(coupon => coupon.id !== 'try-again')
     .reduce((sum, coupon) => {
@@ -29,74 +60,113 @@ export const Milestones = () => {
       return sum;
     }, 0);
 
-  // Determine user level (simplified for demo)
-  const userLevel = 7;
-  const currentXP = 970;
-  const requiredXP = 1300;
-  const totalXP = 4570;
-  const xpPercentage = (currentXP / requiredXP) * 100;
+  // Real user level and XP from database
+  const userLevel = stats.level;
+  const totalXP = stats.xp;
+  
+  // Calculate XP for current level (each level requires 1000 XP)
+  const baseXPForCurrentLevel = (userLevel - 1) * 1000;
+  const currentXP = totalXP - baseXPForCurrentLevel;
+  const requiredXP = 1000; // XP needed for next level
+  const xpPercentage = Math.min((currentXP / requiredXP) * 100, 100);
 
-  // Milestone data
-  const milestones = [
-    {
-      id: '3day',
-      days: 3,
-      status: 'completed',
-      reward: 5,
-      claimed: true,
-      claimedDate: '7/14/2025'
-    },
-    {
-      id: '5day',
-      days: 5,
-      status: 'in-progress',
-      reward: 10,
-      daysToGo: 2
-    },
-    {
-      id: '7day',
-      days: 7,
-      status: 'locked',
-      reward: 20
-    },
-    {
-      id: '10day',
-      days: 10,
-      status: 'locked',
-      reward: 30
-    },
-    {
-      id: '14day',
-      days: 14,
-      status: 'locked',
-      reward: 50
-    },
-    {
-      id: '21day',
-      days: 21,
-      status: 'locked',
-      reward: 75
-    },
-    {
-      id: '30day',
-      days: 30,
-      status: 'locked',
-      reward: 100
-    }
+  // Real streak data from database
+  const currentStreak = streak.current;
+  const bestStreak = streak.best;
+
+  // Define milestone levels and rewards
+  const milestoneDefinitions = [
+    { days: 3, reward: 5 },
+    { days: 5, reward: 10 },
+    { days: 7, reward: 20 },
+    { days: 10, reward: 30 },
+    { days: 14, reward: 50 },
+    { days: 21, reward: 75 },
+    { days: 30, reward: 100 }
   ];
 
-  // Total rewards earned
-  const totalRewards = milestones
-    .filter(m => m.status === 'completed' && m.claimed)
-    .reduce((sum, m) => sum + m.reward, 0);
+  // Get streak rewards from database
+  const streakRewards = rewards.filter(r => r.reward_type === 'streak');
+
+  // Build milestone data with real status
+  const milestones = milestoneDefinitions.map(milestone => {
+    const reward = streakRewards.find(r => r.milestone === milestone.days);
+    
+    let status: 'completed' | 'in-progress' | 'locked' = 'locked';
+    let claimed = false;
+    let claimedDate: string | undefined;
+    let daysToGo: number | undefined;
+
+    if (bestStreak >= milestone.days) {
+      status = 'completed';
+      if (reward) {
+        claimed = reward.status === 'claimed';
+        claimedDate = reward.status === 'claimed' 
+          ? new Date(reward.received_at).toLocaleDateString() 
+          : undefined;
+      }
+    } else if (currentStreak > 0 && milestone.days <= currentStreak + 3) {
+      // Show as in-progress if within 3 days of current streak
+      status = 'in-progress';
+      daysToGo = milestone.days - currentStreak;
+    }
+
+    return {
+      id: `${milestone.days}day`,
+      days: milestone.days,
+      status,
+      reward: milestone.reward,
+      claimed,
+      claimedDate,
+      daysToGo
+    };
+  });
+
+  // Calculate total rewards earned from database
+  const totalRewards = streakRewards
+    .filter(r => r.status === 'claimed')
+    .reduce((sum, r) => sum + r.amount, 0);
+
+  // Function to claim a milestone reward
+  const claimReward = async (milestoneId: string, days: number) => {
+    if (!user) return;
+    
+    // Find the reward for this milestone
+    const reward = streakRewards.find(r => r.milestone === days && r.status === 'claimable');
+    if (!reward) return;
+
+    setClaimingReward(milestoneId);
+    
+    try {
+      // Claim the reward in the database
+      const success = await streakService.claimStreakReward(reward.id);
+      
+      if (success) {
+        console.log(`✅ Successfully claimed ${days}-day streak reward: $${reward.amount}`);
+        
+        // Refresh data to update UI and rewards counter
+        await refreshData();
+        
+        console.log(`🎫 Milestone reward claimed! Check the rewards tab for your $${reward.amount} credit.`);
+      } else {
+        console.error('Failed to claim reward. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error claiming reward:', error);
+    } finally {
+      setClaimingReward(null);
+    }
+  };
 
   return (
     <div className="flex-1 p-4 pb-24">
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Header */}
-        <div className="pb-4">
-          <h1 className="text-2xl font-bold text-white mb-2">Milestones</h1>
-          <p className="text-gray-400">Track your progress and earn rewards</p>
+        <div className="pb-4 flex justify-between items-start">
+          <div>
+            <h1 className="text-2xl font-bold text-white mb-2">Milestones</h1>
+            <p className="text-gray-400">Track your progress and earn rewards</p>
+          </div>
         </div>
 
         {/* Level Progress */}
@@ -167,95 +237,84 @@ export const Milestones = () => {
           <h2 className="text-2xl font-bold text-white mb-5">Milestone Progress</h2>
 
           <div className="space-y-4">
-            {/* 3-Day Streak */}
-            <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <CheckCircle size={24} weight="fill" className="text-green-500" />
-                <div>
-                  <div className="text-white font-semibold">3-Day Streak</div>
-                  <div className="text-gray-400 text-sm">Claimed 7/14/2025</div>
-                </div>
-              </div>
-              <div className="text-green-500 font-bold">$5</div>
-            </div>
+            {milestones.map((milestone) => {
+              // Determine icon and styling based on status
+              let icon, iconColor, borderColor, rewardColor;
+              let statusText = '';
+              
+              if (milestone.status === 'completed') {
+                icon = <CheckCircle size={24} weight="fill" className="text-green-500" />;
+                iconColor = 'text-green-500';
+                borderColor = 'border-gray-700';
+                rewardColor = 'text-green-500';
+                statusText = milestone.claimed 
+                  ? `Claimed ${milestone.claimedDate}` 
+                  : 'Ready to claim!';
+              } else if (milestone.status === 'in-progress') {
+                icon = <Target size={24} weight="fill" className="text-orange-500" />;
+                iconColor = 'text-orange-500';
+                borderColor = 'border-orange-700/50';
+                rewardColor = 'text-yellow-500';
+                statusText = `${milestone.daysToGo} more day${milestone.daysToGo === 1 ? '' : 's'} to go`;
+              } else {
+                icon = <Circle size={24} weight="regular" className="text-gray-500" />;
+                iconColor = 'text-gray-500';
+                borderColor = 'border-gray-700';
+                rewardColor = 'text-gray-300';
+                statusText = 'Not achieved yet';
+              }
 
-            {/* 5-Day Streak */}
-            <div className="bg-gray-800 rounded-xl p-4 border border-orange-700/50 flex flex-col">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <Target size={24} weight="fill" className="text-orange-500" />
-                  <div>
-                    <div className="text-white font-semibold">5-Day Streak</div>
-                    <div className="text-gray-400 text-sm">2 more days to go</div>
+              // Check if this milestone is ready to claim
+              const isReadyToClaim = milestone.status === 'completed' && !milestone.claimed;
+              const isClaimingThis = claimingReward === milestone.id;
+
+              return (
+                <div 
+                  key={milestone.id}
+                  className={`bg-gray-800 rounded-xl p-4 border ${borderColor} ${
+                    milestone.status === 'in-progress' || isReadyToClaim ? 'flex flex-col' : 'flex items-center justify-between'
+                  }`}
+                >
+                  <div className={milestone.status === 'in-progress' || isReadyToClaim ? 'flex items-center justify-between mb-2' : 'flex items-center gap-3'}>
+                    <div className="flex items-center gap-3">
+                      {icon}
+                      <div>
+                        <div className="text-white font-semibold">{milestone.days}-Day Streak</div>
+                        <div className="text-gray-400 text-sm">{statusText}</div>
+                      </div>
+                    </div>
+                    <div className={`${rewardColor} font-bold`}>${milestone.reward}</div>
                   </div>
-                </div>
-                <div className="text-yellow-500 font-bold">$10</div>
-              </div>
-              <div className="text-orange-500 text-sm flex items-center gap-1">
-                <Fire size={16} weight="fill" />
-                <span>Next milestone! Keep your streak alive!</span>
-              </div>
-            </div>
+                  
+                  {milestone.status === 'in-progress' && (
+                    <div className="text-orange-500 text-sm flex items-center gap-1">
+                      <Fire size={16} weight="fill" />
+                      <span>Next milestone! Keep your streak alive!</span>
+                    </div>
+                  )}
 
-            {/* 7-Day Streak */}
-            <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Circle size={24} weight="regular" className="text-red-500" />
-                <div>
-                  <div className="text-white font-semibold">7-Day Streak</div>
-                  <div className="text-gray-400 text-sm">Not achieved yet</div>
+                  {isReadyToClaim && (
+                    <button
+                      onClick={() => claimReward(milestone.id, milestone.days)}
+                      disabled={isClaimingThis}
+                      className="bg-primary hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed text-black px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isClaimingThis ? (
+                        <>
+                          <SpinnerGap size={16} className="animate-spin" />
+                          <span>Claiming...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Money size={16} weight="fill" />
+                          <span>Claim ${milestone.reward}</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
-              </div>
-              <div className="text-gray-300 font-bold">$20</div>
-            </div>
-
-            {/* 10-Day Streak */}
-            <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Circle size={24} weight="regular" className="text-red-500" />
-                <div>
-                  <div className="text-white font-semibold">10-Day Streak</div>
-                  <div className="text-gray-400 text-sm">Not achieved yet</div>
-                </div>
-              </div>
-              <div className="text-gray-300 font-bold">$30</div>
-            </div>
-
-            {/* 14-Day Streak */}
-            <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Circle size={24} weight="regular" className="text-red-500" />
-                <div>
-                  <div className="text-white font-semibold">14-Day Streak</div>
-                  <div className="text-gray-400 text-sm">Not achieved yet</div>
-                </div>
-              </div>
-              <div className="text-gray-300 font-bold">$50</div>
-            </div>
-
-            {/* 21-Day Streak */}
-            <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Circle size={24} weight="regular" className="text-red-500" />
-                <div>
-                  <div className="text-white font-semibold">21-Day Streak</div>
-                  <div className="text-gray-400 text-sm">Not achieved yet</div>
-                </div>
-              </div>
-              <div className="text-gray-300 font-bold">$75</div>
-            </div>
-
-            {/* 30-Day Streak */}
-            <div className="bg-gray-800 rounded-xl p-4 border border-gray-700 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Circle size={24} weight="regular" className="text-red-500" />
-                <div>
-                  <div className="text-white font-semibold">30-Day Streak</div>
-                  <div className="text-gray-400 text-sm">Not achieved yet</div>
-                </div>
-              </div>
-              <div className="text-gray-300 font-bold">$100</div>
-            </div>
+              );
+            })}
           </div>
 
           <div className="mt-6 pt-4 border-t border-gray-700 flex items-center justify-between">
