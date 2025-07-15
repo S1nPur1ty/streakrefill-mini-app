@@ -4,7 +4,6 @@ import { useState, useCallback } from 'react';
 import { useSupabaseUser } from '../hooks/useSupabaseUser';
 import { useTimeTravel } from '../hooks/useTimeTravel';
 import { cleanupService } from '../services/cleanupService';
-import { useAppStore } from '../stores/useAppStore';
 
 interface DevToolsModalProps {
   onDataChange?: () => void;
@@ -26,14 +25,10 @@ export const DevToolsModal = ({ onDataChange }: DevToolsModalProps) => {
 
   const {
     user,
-    streak,
-    stats,
     createPurchase,
     loading,
     refreshData
   } = useSupabaseUser();
-  
-  const { setSpinnerTickets } = useAppStore();
 
   // Notify parent component about data changes
   const notifyDataChange = useCallback(() => {
@@ -345,34 +340,6 @@ export const DevToolsModal = ({ onDataChange }: DevToolsModalProps) => {
               </div>
             )}
           </div>
-
-          {/* Current Stats */}
-          {streak && stats && (
-            <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-              <h3 className="text-lg font-semibold text-white mb-3">📊 Current Stats</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col items-center">
-                  <div className="text-3xl font-bold text-primary">{streak.current}</div>
-                  <div className="text-sm text-gray-400">Current Streak</div>
-                </div>
-                
-                <div className="flex flex-col items-center">
-                  <div className="text-3xl font-bold text-secondary">{streak.best}</div>
-                  <div className="text-sm text-gray-400">Best Streak</div>
-                </div>
-
-                <div className="flex flex-col items-center">
-                  <div className="text-3xl font-bold text-green-500">{stats.level}</div>
-                  <div className="text-sm text-gray-400">Level</div>
-                </div>
-                
-                <div className="flex flex-col items-center">
-                  <div className="text-3xl font-bold text-yellow-500">{stats.xp}</div>
-                  <div className="text-sm text-gray-400">Total XP</div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </Modal>
     </>

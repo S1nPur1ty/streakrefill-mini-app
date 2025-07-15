@@ -8,7 +8,7 @@ import { useSupabaseUser } from '../hooks/useSupabaseUser';
 import { Modal } from './Modal';
 
 export const ProductModal = () => {
-  const { selectedProduct, closeProductModal, selectedCoupon, useCoupon } = useAppStore();
+  const { selectedProduct, closeProductModal, selectedCoupon, useCoupon, selectCoupon } = useAppStore();
   const { user, createPurchase, refreshData } = useSupabaseUser();
   const [purchasing, setPurchasing] = useState<string | null>(null);
 
@@ -64,15 +64,16 @@ export const ProductModal = () => {
         // If a coupon was used, mark it as used
         if (selectedCoupon && finalPrice < originalPrice) {
           useCoupon(selectedCoupon.id);
+          selectCoupon(null); // Unselect the coupon from UI
           const discountType = selectedCoupon.type === 'discount' 
             ? `${selectedCoupon.value}% discount` 
             : `$${selectedCoupon.value} credit`;
           const savings = (originalPrice - finalPrice).toFixed(2);
           console.log(`Applied ${discountType} - Saved $${savings}`);
+        } else {
+          // Only refresh data if no coupon was used to avoid overriding local state
+          await refreshData();
         }
-        
-        // Refresh data to update UI
-        await refreshData();
         
         // Close modal after successful purchase
         closeProductModal();
